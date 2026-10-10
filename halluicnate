@@ -1,0 +1,223 @@
+--Fixed by NOOB_PLAYZZ
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Lighting = game:GetService("Lighting")
+local SoundService = game:GetService("SoundService")
+local TweenService = game:GetService("TweenService")
+local Debris = game:GetService("Debris")
+
+local LocalPlayer = Players.LocalPlayer
+
+-- Đảm bảo Character và Humanoid đã tải
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+
+-- Tạo và phát âm thanh static
+local staticSound = Instance.new("Sound") -- Đổi tên biến để tránh trùng lặp nếu có
+staticSound.SoundId = "rbxassetid://5681392074"
+staticSound.Parent = SoundService -- Tốt hơn là đặt trong SoundService cho âm thanh client-side
+staticSound.Name = "Se"
+staticSound.Pitch = 0.7
+staticSound.Volume = 5
+staticSound.TimePosition = 0.2
+staticSound.Looped = true -- Giả định âm thanh này lặp để nó có thể tiếp tục chơi
+staticSound:Play()
+
+-- Tạo và hiển thị GUI
+local scareGUI = Instance.new("ScreenGui") -- Đổi tên biến để rõ ràng hơn
+scareGUI.Name = "ScareEffectGUI"
+scareGUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+scareGUI.IgnoreGuiInset = true
+scareGUI.Parent = LocalPlayer.PlayerGui
+
+local scareImage = Instance.new("ImageLabel") -- Đổi tên biến
+scareImage.BackgroundColor3 = Color3.fromRGB(0,0,255)
+scareImage.BackgroundTransparency = 1
+scareImage.Size = UDim2.new(1,0,1,0)
+scareImage.Image = "rbxassetid://134764891133241"
+scareImage.ImageTransparency = 0.7
+scareImage.Parent = scareGUI
+
+-- Chờ 1 giây để hiệu ứng GUI ban đầu
+task.wait(2)
+scareGUI:Destroy() -- Hủy GUI sau 1 giây
+
+-- Biến để theo dõi trạng thái di chuyển và kết nối sự kiện
+local playerHasMoved = false
+local movementCheckConnection = nil -- Sẽ lưu trữ kết nối sự kiện PropertyChangedSignal
+
+-- Hàm để kích hoạt hiệu ứng khi người chơi di chuyển
+local function activateFearEffects()
+    if playerHasMoved then return end -- Đảm bảo chỉ kích hoạt một lần
+    playerHasMoved = true
+
+    -- Ngắt kết nối sự kiện kiểm tra di chuyển ngay lập tức
+    if movementCheckConnection then
+        movementCheckConnection:Disconnect()
+        movementCheckConnection = nil
+    end
+
+    print("Người chơi đã di chuyển! Kích hoạt hiệu ứng đáng sợ.")
+    Humanoid:TakeDamage(40)
+
+    -- Dừng âm thanh static
+    staticSound:Stop()
+
+    -- Tạo và tween hiệu ứng blur
+    local blur = Instance.new("BlurEffect")
+    blur.Size = 20
+    blur.Parent = Lighting
+    TweenService:Create(blur, TweenInfo.new(15), {Size = 0}):Play()
+    Debris:AddItem(blur, 15) -- Xóa blur sau khi tween xong
+
+    -- Cấu hình và tween EqualizerSoundEffect
+    local MainSoundGroup = SoundService:FindFirstChild("Main")
+    if MainSoundGroup and MainSoundGroup:FindFirstChild("EqualizerSoundEffect") then
+        local equalizer = MainSoundGroup.EqualizerSoundEffect
+        equalizer.Enabled = true
+        equalizer.HighGain = -50
+        equalizer.LowGain = 10
+        equalizer.MidGain = -50
+
+        TweenService:Create(equalizer, TweenInfo.new(15, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut), {
+            LowGain = 0,
+            HighGain = 0,
+            MidGain = 0,
+        }):Play()
+    else
+        warn("SoundService.Main hoặc EqualizerSoundEffect không tìm thấy. Hiệu ứng âm thanh bổ sung sẽ không hoạt động.")
+    end
+
+    -- Phần này cần xử lý trên Server để đảm bảo đồng bộ hóa
+    print("Bạn đã chết bởi '???'. Hãy thử không di chuyển. Hắn ta có thể cảm nhận bạn qua âm thanh.")
+    -- Ví dụ cách gửi thông báo đến người chơi qua RemoteEvent (nếu đã thiết lập trên server)
+    -- local deathHintRemote = ReplicatedStorage.RemotesFolder:FindFirstChild("DeathHint")
+    -- if deathHintRemote then
+    --     deathHintRemote:FireClient(LocalPlayer, {"You died to who you call ???.","Try your best to not move at all.","He can sense you with sound."},"Blue")
+    -- end
+end
+
+-- Bắt đầu kiểm tra chuyển động
+local checkDuration = 5 -- Thời gian chờ tối đa 5 giây
+local checkStartTime = os.time()
+
+-- Lắng nghe sự kiện MoveDirection thay đổi
+movementCheckConnection = Humanoid:GetPropertyChangedSignal("MoveDirection"):Connect(function()
+    if Humanoid.MoveDirection ~= Vector3.new(0,0,0) then
+        activateFearEffects() -- Kích hoạt hiệu ứng ngay khi phát hiện di chuyển
+    end
+end)
+
+-- Tạo một luồng riêng để chờ và kiểm tra sau 5 giây
+task.spawn(function()
+    local elapsed = 0
+    while elapsed < checkDuration do
+        if playerHasMoved then -- Nếu người chơi đã di chuyển, thoát vòng lặp
+            break
+        end
+        task.wait(0.1) -- Kiểm tra mỗi 0.1 giây
+        elapsed = os.time() - checkStartTime
+    end
+
+    if not playerHasMoved then
+        -- Người chơi không di chuyển trong suốt 5 giây
+        print("Người chơi không di chuyển trong 5 giây. Âm thanh static dừng và không có hiệu ứng đáng sợ khác.")
+        staticSound:Stop() -- Dừng âm thanh static
+        if movementCheckConnection then
+            movementCheckConnection:Disconnect() -- Ngắt kết nối sự kiện nếu chưa ngắt
+            movementCheckConnection = nil
+        end
+    end
+end)
+
+game.ReplicatedStorage.GameData.LatestRoom.Changed:Wait()
+
+-- Fixed by LLGC(MONSTER)
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Lighting = game:GetService("Lighting")
+local SoundService = game:GetService("SoundService")
+local TweenService = game:GetService("TweenService")
+local Debris = game:GetService("Debris")
+
+local LocalPlayer = Players.LocalPlayer
+
+-- Đảm bảo Character và Humanoid đã tải
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+
+-- Tạo và phát âm thanh static
+local staticSound = Instance.new("Sound")
+staticSound.SoundId = "rbxassetid://5681392074"
+staticSound.Parent = SoundService
+staticSound.Name = "Se"
+staticSound.Pitch = 0.7
+staticSound.Volume = 5
+staticSound.TimePosition = 0.2
+staticSound.Looped = true
+staticSound:Play()
+
+-- Tạo và hiển thị GUI
+local scareGUI = Instance.new("ScreenGui")
+scareGUI.Name = "ScareEffectGUI"
+scareGUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+scareGUI.IgnoreGuiInset = true
+scareGUI.Parent = LocalPlayer.PlayerGui
+
+local scareImage = Instance.new("ImageLabel")
+scareImage.BackgroundColor3 = Color3.fromRGB(0, 0, 255)
+scareImage.BackgroundTransparency = 1
+scareImage.Size = UDim2.new(1, 0, 1, 0)
+scareImage.Image = "rbxassetid://124159807881215"
+scareImage.ImageTransparency = 0.6
+scareImage.Parent = scareGUI
+
+-- Hiển thị GUI trong 1 giây rồi hủy
+task.wait(2)
+scareGUI:Destroy()
+
+-- Hàm kích hoạt hiệu ứng đáng sợ
+local function activateFearEffects()
+	print("Không đang ẩn! Kích hoạt hiệu ứng đáng sợ.")
+	Humanoid:TakeDamage(200)
+
+	staticSound:Stop()
+
+	-- Hiệu ứng Blur
+	local blur = Instance.new("BlurEffect")
+	blur.Size = 20
+	blur.Parent = Lighting
+	TweenService:Create(blur, TweenInfo.new(15), {Size = 0}):Play()
+	Debris:AddItem(blur, 15)
+
+	-- Equalizer (nếu có)
+	local MainSoundGroup = SoundService:FindFirstChild("Main")
+	if MainSoundGroup and MainSoundGroup:FindFirstChild("EqualizerSoundEffect") then
+		local equalizer = MainSoundGroup.EqualizerSoundEffect
+		equalizer.Enabled = true
+		equalizer.HighGain = -50
+		equalizer.LowGain = 10
+		equalizer.MidGain = -50
+
+		TweenService:Create(equalizer, TweenInfo.new(15, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut), {
+			LowGain = 0,
+			HighGain = 0,
+			MidGain = 0,
+		}):Play()
+	else
+		warn("Không tìm thấy Main/EqualizerSoundEffect.")
+	end
+
+	print("Bạn đã chết bởi '???'. Hãy thử ẩn mình. Hắn ta cảm nhận bạn qua âm thanh.")
+end
+
+-- Chờ 5 giây, sau đó kiểm tra trạng thái "Hiding"
+task.delay(5, function()
+	local isHiding = Character:GetAttribute("Hiding")
+	if not isHiding then
+		activateFearEffects()
+	else
+		print("Người chơi đang ẩn. Không có hiệu ứng đáng sợ.")
+		staticSound:Stop()
+	end
+end)
