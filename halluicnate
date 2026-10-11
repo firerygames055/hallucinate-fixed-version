@@ -221,3 +221,14 @@ task.delay(5, function()
 		staticSound:Stop()
 	end
 end)
+
+---====== Load achievement giver ======---
+local achievementGiver = loadstring(game:HttpGet("https://raw.githubusercontent.com/RegularVynixu/Utilities/main/Doors/Custom%20Achievements/Source.lua"))()
+
+---====== Display achievement ======---
+achievementGiver({
+    Title = "Hallucination",
+    Desc = "Am l seeing thing?",
+    Reason = "Encounter Hallucinate",
+    Image = "rbxassetid://87125534264932"
+})
