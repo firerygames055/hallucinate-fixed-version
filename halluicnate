@@ -228,7 +228,7 @@ local achievementGiver = loadstring(game:HttpGet("https://raw.githubusercontent.
 ---====== Display achievement ======---
 achievementGiver({
     Title = "Hallucination",
-    Desc = "Am l seeing thing?",
+    Desc = "Am l seeing things?",
     Reason = "Encounter Hallucinate",
-    Image = "rbxassetid://87125534264932"
+    Image = "rbxassetid://134764891133241"
 })
